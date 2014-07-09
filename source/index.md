@@ -1,14 +1,8 @@
 ---
-title: API Reference
+title: Koken API Reference
 
 language_tabs:
   - shell
-  - ruby
-  - python
-
-toc_footers:
-  - <a href='#'>Sign Up for a Developer Key</a>
-  - <a href='http://github.com/tripit/slate'>Documentation Powered by Slate</a>
 
 includes:
   - errors
@@ -18,67 +12,120 @@ search: true
 
 # Introduction
 
-Welcome to the Kittn API! You can use our API to access Kittn API endpoints, which can get information on various cats, kittens, and breeds in our database.
+Every installation of Koken exposes an API that can be used to read and write data from that install.
 
-We have language bindings in Shell, Ruby, and Python! You can view code examples in the dark area to the right, and you can switch the programming language of the examples with the tabs in the top right.
+To make a request to the API, you will need the install's API path, which is the domain and path to the Koken installation. For the rest of this document, we'll assume that the API path is:
 
-This example API documentation page was created with [Slate](http://github.com/tripit/slate). Feel free to edit it and use it as a base for your own API's documentation.
+`http://myphotosite.com/koken`
+
+# Making a request
+
+```shell
+curl http://myphotosite.com/koken/api.php?/content
+```
+
+To make a request, you will need to form the URL to the endpoint using the supplied API path and the endpoint you are wishing to access. To determine the URL to call, think of this psuedo code:
+
+`API Path + 'api.php?' + endpoint`
+
+For example, to call the `/content` endpoint, the full URL would be:
+
+`http://myphotosite.com/koken/api.php?/content`
+
+# Response format
+
+```shell
+curl -H "Accept: application/json" http://myphotosite.com/koken/api.php?/content
+```
+
+Currently, all Koken API responses return data as JSON. For future proofing, we recommend explicitly passing the `Accept` header.
+
+# Errors
+
+> Accessing an image that does not exist
+
+```shell
+curl -i -H "Accepts: application/json" http://koken.dev:8888/api.php?/content/2222
+
+HTTP/1.1 404 Not Found
+Server: Apache/2.4.7 (Ubuntu)
+Content-Length: 95
+Content-Type: application/json
+
+{
+  "request": "/api.php?/content/2222",
+  "error": "Content with ID: 2222 not found.",
+  "http": "404"
+}
+```
+
+When the Koken API encounters an error, it returns an appropriate HTTP error code as well as a JSON payload with more information about the error.
 
 # Authentication
 
-> To authorize, use this code:
-
-```ruby
-require 'kittn'
-
-api = Kittn::APIClient.authorize!('meowmeowmeow')
-```
-
-```python
-import 'kittn'
-
-api = Kittn.authorize('meowmeowmeow')
-```
+> To authorize, send the token in a custom HTTP header:
 
 ```shell
-# With shell, you can just pass the correct header with each request
-curl "api_endpoint_here"
-  -H "Authorization: meowmeowmeow"
+curl -H "Accepts: application/json" \
+     -H "X-Koken-Token: your-token-here" \
+     http://myphotosite.com/koken/api.php?/content
 ```
 
-> Make sure to replace `meowmeowmeow` with your API key.
+To read public data from a Koken install, authorization is not required. To read unlisted or private information, or to make modifications to content via the API, authorization is required via *tokens*. There are two levels of token permissions:
 
-Kittn uses API keys to allow access to the API. You can register a new Kittn API key at our [developer portal](http://example.com/developers).
+Permissions | Description
+--------- | -----------
+read | Access to all public, unlisted and private content, albums and essays.
+read-write | Same permissions as read but also with permission to create and delete.
 
-Kittn expects for the API key to be included in all API requests to the server in a header that looks like the following:
+The user of the install will need to generate and supply your application with the appropriate token by logging in to their Koken install and visiting `Settings > Applications`.
 
-`Authorization: meowmeowmeow`
+# Pagination
 
-<aside class="notice">
-You must replace `meowmeowmeow` with your personal API key.
-</aside>
+> Example JSON info included in list responses:
 
-# Kittens
+```json
+{
+  "page": 1,
+  "pages": 4,
+  "per_page": 10,
+  "albums": [
 
-## Get All Kittens
-
-```ruby
-require 'kittn'
-
-api = Kittn::APIClient.authorize!('meowmeowmeow')
-api.kittens.get
+  ]
+}
 ```
-
-```python
-import 'kittn'
-
-api = Kittn.authorize('meowmeowmeow')
-api.kittens.get()
-```
+> Get the next page
 
 ```shell
-curl "http://example.com/api/kittens"
-  -H "Authorization: meowmeowmeow"
+curl -H "Accepts: application/json" \
+     http://myphotosite.com/koken/api.php?/albums/page:2/limit:10
+```
+
+Any API endpoint that returns a list will also return information that can be used to paginate over that list.
+
+# Parameters
+
+```shell
+curl -H "Accepts: application/json" \
+     http://myphotosite.com/koken/api.php?/albums/order_by:published_on/order_direction:desc
+```
+
+Because Koken's entire endpoint is contained in the query string, parameters are passed as key/value pairs in the URL itself. All parameters should be placed at the end of the API URL.
+
+> Boolean parameters should be passed as a 0 (for false) or 1 (for true);
+
+```shell
+curl -H "Accepts: application/json" \
+     http://myphotosite.com/koken/api.php?/albums/include_empty:0
+```
+
+# Albums
+
+## Get all albums
+
+```shell
+curl -H "Accepts: application/json" \
+     http://myphotosite.com/koken/api.php?/albums
 ```
 
 > The above command returns JSON structured like this:
@@ -102,24 +149,39 @@ curl "http://example.com/api/kittens"
 ]
 ```
 
-This endpoint retrieves all kittens.
+Without authentication, this endpoint retrieves all public albums. When authenticated, unlisted albums are also returned.
 
-### HTTP Request
+### Endpoint
 
-`GET http://example.com/kittens`
+`GET /albums`
 
 ### Query Parameters
 
-Parameter | Default | Description
---------- | ------- | -----------
-include_cats | false | If set to true, the result will also include cats.
-available | true | If set to false, the result will include kittens that have already been adopted.
+Parameter | Default | Description | Valid values
+--------- | ------- | ----------- | ------------
+day | false | Return albums from a particular day. Requires a valid year and month parameter. | Any valid day. ex: 1
+day_not | false | Return albums from all buy one particular day. Requires a valid year and month parameter. | Any valid day. ex: 1
+flat | false | Return all albums in the list, regardless of their hierachacal level. | true or false
+id_not | false | Exclude albums from the list by id. | Any album ID. Exclude multiple IDs using a comma. Ex: 1,2
+include_empty | true | If false, albums containing no content are omitted from the results. | true or false
+limit | false | Limit the number of albums to return per page of results. | Any number greater than zero.
+listed | true | If false, unlisted albums are retured as well. Requires authorization. | true or false
+match_all_tags | false | When using tags or tags_not, whether to look for all of the supplied tags. | true or false
+month | false | Return albums from a particular month. Requires a valid year parameter. | Any valid month. ex: 1
+month_not | false | Return albums from all buy one particular month. Requires a valid year parameter. | Any valid month. ex: 1
+order_by | title | What data is used to sort the returned list. | title, published_on, modified_on, created_on
+order_direction | ASC | Whether to sort in ASC or DESC order. | ASC or DESC
+page | 1 | See pagination. | Any number from 1 to total_pages.
+search | false | String to search by. Search is performed on the album's title, description and tag fields unless search_filter is defined. | Any string
+search_filter | false | Limit the fields used in the search. | title, description or tags
+tags | false | Search for albums with specific tags. | Any string. Separate multiple tags with a comma.
+tags_not | false | Search for albums without specific tags. | Any string. Separate multiple tags with a comma.
+types | all | Return only sets or standard albums. | all, set or standard
+with_covers | true | Whether or not to return cover data with each album | true or false
+year | false | Return albums from a particular year. | Any valid year. ex: 2014
+year_not | false | Return albums from all buy one particular year. | Any valid year. ex: 2014
 
-<aside class="success">
-Remember — a happy kitten is an authenticated kitten!
-</aside>
-
-## Get a Specific Kitten
+## Get a specific album
 
 ```ruby
 require 'kittn'
